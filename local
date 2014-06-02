@@ -1,5 +1,34 @@
 #!/usr/bin/env sh
 
+while test $# -gt 0; do
+        case "$1" in
+                -h|--help)
+                        echo "$package - attempt to capture frames"
+                        echo " "
+                        echo "$package [options] application [arguments]"
+                        echo " "
+                        echo "options:"
+                        echo "-h, --help                show brief help"
+                        echo "-a, --action=ACTION       specify an action to use"
+                        echo "-o, --output-dir=DIR      specify a directory to store output in"
+                        exit 0
+                        ;;
+                -db|--database)
+                        shift
+                        if test $# -gt 0; then
+                                DATABASE=$1
+                        else
+                                echo "error: database argument present, but no database specified"
+                                exit 1
+                        fi
+                        shift
+                        ;;
+                *)
+                        break
+                        ;;
+        esac
+done
+
 function fail_bootstrapping {
   echo "\033[1m\033[31mBootstrapping failed!\033[0m\n\033[31m${1}\033[0m"
   exit 1
@@ -7,6 +36,12 @@ function fail_bootstrapping {
 
 function fail_dependency {
   fail_bootstrapping "Please install ${1} and try again"
+}
+
+function containsElement {
+  local e
+  for e in "${@:2}"; do [[ "$e" == "$1" ]] && return 0; done
+  return 1
 }
 
 git --version >/dev/null 2>&1 || fail_dependency "git"
@@ -30,5 +65,21 @@ cd casa-environment
 
 sed 's/"path": "dev",/"path": "..",/g' config/dev.json > config/local.json
 
-bundle install --without mssql
+POSSIBLE_DBS=(mssql sqlite mysql2);
+
+if  containsElement "$DATABASE" "${POSSIBLE_DBS[@]}" ; then
+    echo "running bundle with database option: $DATABASE";
+	BUNDLE_COMMAND="bundle install --without";
+	for i in "${POSSIBLE_DBS[@]}"
+	do
+		if [ "$DATABASE" != "$i" ]; then
+			BUNDLE_COMMAND="$BUNDLE_COMMAND $i";
+		fi
+	done
+	eval $BUNDLE_COMMAND
+else
+    echo "didn't receive a database option, defaulting to mssql";
+	bundle install --without mssql;
+fi
+
 bundle exec casa-environment setup -c config/local.json
